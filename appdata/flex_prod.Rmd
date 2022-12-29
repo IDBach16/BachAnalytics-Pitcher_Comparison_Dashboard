@@ -1,0 +1,963 @@
+---
+title: "Bach Analytics"
+output: 
+  flexdashboard::flex_dashboard:
+    theme:
+      bg: "#101010"
+      fg: "#FDF7F7" 
+      primary: "#212e61"
+      base_font:
+        google: Prompt
+      code_font:
+        google: JetBrains Mono
+    orientation: columns
+    navbar:
+      - {icon: "fa-spotify",href="https://open.spotify.com/show/0CDMGqVvHRywCR8bZKrSXR",align:right}
+    vertical_layout: fill
+---
+
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+
+
+```{r data scrape}
+#("C:/Users/ibach/Dropbox/IBach 1-1 Intensive/Project/App/appdata")
+source("libraries.R")
+source("clusterprep.R")
+source("clusterserver.R")
+library(thematic)
+#Player Image Example  URL (Harper)
+#https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/547180/headshot/67/current
+thematic::thematic_rmd()
+
+
+```
+
+
+Comparison Tool {data-navmenu="Pitchers"}
+========================================
+
+Input{.sidebar}
+-------------------
+
+![](bachlogo.png){width=100%}
+
+
+```{r Comparison Tool Inputs}
+
+
+tms <- baseballr::mlb_schedule()%>% 
+  mutate(team=teams_away_team_name,
+         team_id=teams_away_team_id) %>% 
+  dplyr::select(team,team_id) %>% 
+  arrange(team) %>% 
+  group_by(team) %>% 
+  summarise(team_id=team_id[1]) %>% 
+  filter(!team %in% c("Canada Jr. Team",
+  "Detroit Tigers Futures",
+  "National League All-Stars",
+  "Northeastern Huskies",
+  "Rochester Red Wings",
+  "South Florida Bulls",
+  "Southeastern Fire"))
+
+selectInput(
+  "compid1",
+  "Select Team 1",
+  choices=tms[,1],
+  selected = tms[1,1],
+  multiple=FALSE
+)
+
+
+
+renderUI({
+
+rost1 <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team==input$compid1) %>% 
+                                  pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current")) %>% 
+  filter(position_name=="Pitcher")
+  
+selectInput(
+  "compplayer1",
+  "Select Player 1",
+  choices=rost1 %>% pull(person_full_name),
+  selected=rost1 %>% pull(person_full_name) %>% head(1),
+  multiple=FALSE)
+
+})
+  
+selectInput(
+  "compid2",
+  "Select Team 2",
+  choices=tms[,1],
+  selected = tms[2,1],
+  multiple=FALSE
+)
+
+renderUI({
+
+rost2 <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team==input$compid2) %>% pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(position_name=="Pitcher")
+  
+selectInput(
+  "compplayer2",
+  "Select Player 2",
+  choices=rost2 %>% pull(person_full_name),
+  selected=rost2 %>% pull(person_full_name) %>% head(1),
+  multiple=FALSE)
+
+})
+```
+
+
+
+
+```{r Player Image Example}
+
+ # div(
+ #        tags$img(src ="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/547180/headshot/67/current" , height = "100%", width = "100%"),
+ #        style = "text-align: center;"
+ #      )
+```
+
+
+  
+
+
+Column 
+------------------------
+
+### Pitcher 1 Mix
+
+
+```{r Pitcher 1 Mix}
+render_gt({
+
+sampleid <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team_id==tms %>% filter(team==input$compid1) %>% pull(team_id)) %>% 
+                                   pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(person_full_name==input$compplayer1) %>% 
+  pull(person_id)
+
+
+test <- baseballr::statcast_search_pitchers("2022-04-01",today(),sampleid)%>% 
+  filter(pitch_type %!in% c("")) 
+
+test%>% 
+   group_by(pitch_type) %>%
+   summarise(Usage=paste0(round(100*n()/length(test$des),2),"%"),
+             `Avg. Speed`=round(mean(release_speed,na.rm=TRUE),2)) %>% 
+  gt()
+
+  
+})
+```
+
+
+
+### Pitcher 1 Exit Graphs
+
+```{r Pitcher 1 Exit Graphs}
+
+renderPlot({
+
+sampleid <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team_id==tms %>% filter(team==input$compid1) %>% pull(team_id)) %>% 
+                                   pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(person_full_name==input$compplayer1) %>% 
+  pull(person_id)  
+  
+  
+test <- baseballr::statcast_search_pitchers("2022-04-01",today(),sampleid)%>% 
+  filter(pitch_type %!in% c("")) 
+
+
+test %>% 
+  filter(is.na(launch_angle)==FALSE) %>% 
+  ggplot(aes(x=launch_angle,y=launch_speed))+
+  geom_point()+
+  labs(title=paste0(input$compplayer1,": Batter Results Exit Velo vs. Launch Angle"),
+       x="Launch Angle",
+       y="Exit Velo (mph)")+
+  theme_bw()
+
+
+
+})
+```
+
+
+### Pitch Locations Pitcher 1
+
+```{r Pitch Locations Pitcher 1}
+
+renderPlot({
+
+sampleid <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team_id==tms %>% filter(team==input$compid1) %>% pull(team_id)) %>% 
+                                   pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(person_full_name==input$compplayer1) %>% 
+  pull(person_id)  
+  
+  
+test <- baseballr::statcast_search_pitchers("2022-04-01",today(),sampleid)%>% 
+  filter(pitch_type %!in% c("")) 
+
+
+
+p <- test %>% 
+  mutate(x=plate_x,
+         z=plate_z,
+         Pitch=pitch_type,
+         result=description) %>% 
+  kzoneplot()
+
+
+tabBox(width=12,
+      title = "First tabBox",
+      id = "tabset1",
+      tabPanel("TabA", p),
+      tabPanel("TabB", p)
+    ) 
+
+
+})
+
+
+```
+
+
+
+
+Column 
+-----------------------
+
+
+### Pitcher 2 Mix
+
+```{r Pitcher 2 Mix}
+
+render_gt({
+
+sampleid <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team_id==tms %>% filter(team==input$compid2) %>% pull(team_id)) %>% 
+                                   pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(person_full_name==input$compplayer2) %>% 
+  pull(person_id)
+
+
+test <- baseballr::statcast_search_pitchers("2022-04-01",today(),sampleid)%>% 
+  filter(pitch_type %!in% c("")) 
+
+test%>% 
+   group_by(pitch_type) %>%
+   summarise(Usage=paste0(round(100*n()/length(test$des),2),"%"),
+             `Avg. Speed`=round(mean(release_speed,na.rm=TRUE),2)) %>% 
+  gt()
+
+  
+})
+
+
+```
+
+
+
+### Pitcher 2 Exit Graphs
+
+```{r Pitcher 2 Exit Graphs}
+renderPlot({
+
+sampleid <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team_id==tms %>% filter(team==input$compid2) %>% pull(team_id)) %>% 
+                                   pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(person_full_name==input$compplayer2) %>% 
+  pull(person_id)  
+  
+  
+test <- baseballr::statcast_search_pitchers("2022-04-01",today(),sampleid)%>% 
+  filter(pitch_type %!in% c("")) 
+
+
+test %>% 
+  filter(is.na(launch_angle)==FALSE) %>% 
+  ggplot(aes(x=launch_angle,y=launch_speed))+
+  geom_point()+
+  labs(title=paste0(input$compplayer2,": Batter Results Exit Velo vs. Launch Angle"),
+       x="Launch Angle",
+       y="Exit Velo (mph)")+
+  theme_bw()
+
+
+
+})
+```
+
+### Pitch Locations Pitcher 2
+
+```{r Pitch Locations Pitcher 2}
+
+renderPlotly({
+
+sampleid <- baseballr::mlb_rosters(team_id = tms %>% 
+                                 filter(team_id==tms %>% filter(team==input$compid2) %>% pull(team_id)) %>% 
+                                   pull(team_id),season=2022,roster_type = "active") %>% 
+      mutate(link=paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/",person_id,"/headshot/67/current"))%>% 
+  filter(person_full_name==input$compplayer2) %>% 
+  pull(person_id)  
+  
+  
+test <- baseballr::statcast_search_pitchers("2022-04-01",today(),sampleid)%>% 
+  filter(pitch_type %!in% c("")) 
+
+
+
+test %>% 
+  mutate(x=plate_x,
+         z=plate_z,
+         Pitch=pitch_type,
+         result=description) %>% 
+  kzoneplot()
+
+
+kplotly
+
+
+})
+
+
+
+```
+
+
+
+
+Game Reports {data-navmenu="Pitchers"}
+==========================================
+
+Input{.sidebar}
+-------------------
+
+![](bachlogo.png){width=100%}
+
+```{r Game Reports Inputs}
+
+sched <- baseballr::mlb_schedule(season=2022) %>% 
+                                             mutate(
+                                               game=paste0(date,": ",teams_home_team_name," vs. ",teams_away_team_name," (",series_game_number,")")
+                                             )
+
+
+## Game PKs -- > passed through pbp data
+
+
+report_teams <- sched %>% 
+  dplyr::filter(teams_home_team_name !="National League All-Stars",
+                teams_away_team_name !="American League All-Stars") %>% 
+  pull(teams_home_team_name) %>% 
+  unique() %>% 
+  sort()
+
+
+selectInput(
+  
+  inputId = "reportteam",
+  label="Select a Team",
+  choices=report_teams,
+  selected=report_teams[1],
+  multiple=FALSE
+  
+)
+
+
+renderUI({
+
+games <- sched %>% 
+  dplyr::filter(
+    teams_home_team_name==input$reportteam|teams_away_team_name==input$reportteam
+  ) %>% 
+  dplyr::pull(game)  
+  
+selectInput(
+  
+  inputId = "reportgame",
+  label="Choose a Game",
+  choices=games,
+  selected=games[1],
+  multiple=FALSE
+  
+)
+  
+})
+
+renderUI({
+  
+gmdat <- mlb_pbp(
+sched %>% 
+  dplyr::filter(game==input$reportgame) %>% 
+  pull(game_pk)
+)  
+
+
+selectInput(
+  
+  inputId = "gmpitcher",
+  label="Pitcher",
+  choices=gmdat %>% 
+  pull(matchup.pitcher.fullName) %>% 
+  unique() %>% 
+  sort(),
+  selected=gmdat %>% 
+  pull(matchup.pitcher.fullName) %>% 
+  unique() %>% 
+  sort() %>% head(1),
+  multiple=FALSE
+  
+)
+
+  
+})
+
+```
+
+Column 
+------------------------
+
+
+### Game Report Strikezone
+
+
+```{r Game Report Strikezone}
+renderPlotly({
+  
+
+  
+  gmdatpk<- sched %>% 
+  dplyr::filter(game==input$reportgame) %>% 
+  dplyr::pull(game_pk)
+  
+  gmdat <- mlb_pbp(gmdatpk)
+
+
+  topKzone = 3.5
+  botKzone = 1.5
+  inKzone = -.85
+  outKzone = 0.85
+
+  kZone = data.frame(
+    PlateLocSide = c(inKzone, inKzone, outKzone, outKzone, inKzone)
+    , PlateLocHeight = c(botKzone, topKzone, topKzone, botKzone, botKzone)
+  )
+
+p <- ggplot() +
+    geom_point(data = gmdat %>% 
+                 filter(matchup.pitcher.fullName==input$gmpitcher) %>% 
+                 mutate(`Pitch Type`=details.type.description,
+                        PlateLocSide=pitchData.coordinates.pX,
+                        PlateLocHeight=pitchData.coordinates.pZ,
+                        PitchCall=details.call.description),
+               aes(x=PlateLocSide, y=PlateLocHeight,color =`Pitch Type`,label = PitchCall))+ coord_equal() +
+    geom_label()+
+    geom_path(aes(PlateLocSide, PlateLocHeight), data = kZone,color="black") + theme_bw()+  xlim(-2,2) + ylim(-.5,6)+ggtitle("Pitch Location") + xlab ("Plate Location Side (ft)") + ylab("Plate Location Height (ft)") +coord_fixed()+theme(plot.title = element_text(hjust = 1))+
+    geom_segment(aes(x=-8.5/12,xend=8.5/12,y=(10/12)-1,yend=(10/12)-1),color="black")+
+    geom_segment(aes(x=-8.5/12,xend=-8.5/12,y=(10/12)-1,yend=0),color="black")+
+    geom_segment(aes(x=8.5/12,xend=8.5/12,y=(10/12)-1,yend=0),color="black")+
+    geom_segment(aes(x=8.5/12,xend=0,y=0,yend=(15/12)-1),color="black")+
+    geom_segment(aes(x=-8.5/12,xend=0,y=0,yend=(15/12)-1),color="black")+
+    theme_bw()+
+    theme(plot.title = element_text(hjust = 0.5))+
+    theme(legend.position="bottom",
+          legend.title = element_text(size=10), #change legend title font size
+          legend.text = element_text(size=10))
+  
+  ggplotly( 
+    p
+  )%>%
+    layout(legend = list(
+      orientation = "h"
+    ),
+    xaxis=list(
+      title=list(text="",font=list(size=10))
+    ),
+    yaxis=list(
+      title=list(text="",font=list(size=10))
+    )
+    )
+  
+
+})
+```
+
+
+Column
+------------
+
+### Postgame Information Table
+
+```{r Postgame Information Table}
+
+
+###take gmdat --- pass into a gt table %>% gt() %>% create summary stats from the game 
+### you can stage this table (nonreactive by messing with this data set below)
+
+
+# 
+# gmdat
+
+## render_gt({
+
+# gmdat <- mlb_pbp(
+# sched %>% 
+#   dplyr::filter(game==input$reportgame) %>% 
+#   pull(game_pk)
+# )  
+
+##    })
+
+
+
+```
+
+
+### Postgame Velo Tracker
+
+```{r Postgame Velo Tracker}
+
+renderHighchart({
+
+gmdat <- mlb_pbp(
+sched %>% 
+  dplyr::filter(game==input$reportgame) %>% 
+  pull(game_pk)
+)  
+
+ 
+
+
+gmdat %>% 
+    filter(matchup.pitcher.fullName==input$gmpitcher,
+           isPitch==TRUE) %>% 
+    arrange(startTime) %>% 
+  mutate(Pitch=ifelse(isPitch==TRUE,1,0),
+         Team=fielding_team,
+         PTotal=cumsum(Pitch),
+         Velo=pitchData.startSpeed) %>% 
+  dplyr::select(PTotal,Velo,details.type.description)%>% 
+hchart("line",
+       hcaes(x=PTotal,
+       y=Velo,
+       group=details.type.description)
+)
+
+})
+##K zone example 
+
+# gmdat$pitchData.coordinates.pX
+# gmdat$pitchData.coordinates.pZ
+
+
+```
+
+Comparison Tool {data-navmenu="Teams"}
+=====================================
+
+
+Input{.sidebar}
+-----------------
+
+![](bachlogo.png){width=100%}
+
+
+```{r Comparison Inputs (Team-level)}
+
+```
+
+Column
+-------
+
+### Postgame Info Table Team 1
+
+```{r Postgame Info Table Team 1}
+
+```
+
+### Postgame Command Team 1
+
+```{r Postgame Command Team 1}
+
+```
+
+
+
+
+Column
+-------
+
+### Postgame Info Table Team 2
+
+```{r Postgame Info Table Team 2}
+
+```
+
+
+### Postgame Command Team 2
+
+```{r Postgame Command Team 2}
+
+```
+
+Game Reports{data-navmenu="Teams"}
+=====================================
+
+
+Input{.sidebar}
+-----------------
+
+![](bachlogo.png){width=100%}
+
+
+```{r Game Report Inputs (Team-level)}
+
+```
+
+
+Column
+---------
+
+### Team Game Report
+
+```{r Team Game Report}
+#Postgame information about a particular teams pitchers -- let me know what info
+```
+
+
+
+Pitcher-Based {data-navmenu="Similarity Model"}
+===============================================
+
+
+Input{.sidebar}
+-------------------
+
+![](bachlogo.png){width=100%}
+
+```{r Pitcher-based similarity model inputs}
+selectInput(inputId = 'player_choice',
+            label = 'Pitcher:',
+            choices = sort(unique(pitches$player_name)),
+            multiple = FALSE,
+            selected = sort(unique(pitches$player_name)[1])
+)
+
+selectInput(inputId = 'n_pitches_choice',
+              label = 'Number of pitches:',
+              choices = seq(1:7),
+              selected = 2)
+
+  sliderInput(inputId = 'spin_ratio_importance_choice',
+                                     label = 'Emphasize velocity or spin rate?**',
+                                     min = -1,
+                                     max = 1,
+                                     value = 0,
+                                     step = 0.05,
+                                     round = -2,
+                                     ticks = FALSE)
+  
+  
+  
+
+    renderUI({
+       
+      div(
+        tags$img(src = paste0("https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_426,q_auto:best/v1/people/",as.character(pitches %>% 
+                                filter(player_name=="Darvish, Yu") %>% 
+                                pull(player_id) %>% 
+                                head(1)),"/headshot/67/current"), height = "100%", width = "100%"),
+        style = "text-align: center;"
+      )
+  
+    })
+
+
+```
+
+Column
+--------
+
+### Similar Player Data Table
+
+```{r Similar Player Data Table (Pitcher-based)}
+max_n_pitches <- reactive(length(pitcherTopPitches(player_name = input$player_choice, n_pitches = 100, metrics = FALSE)))
+  isolate(observe({updateSelectInput(session = session, inputId = 'n_pitches_choice', choices = seq(1:max_n_pitches()), selected = min(max_n_pitches(), 2))}))
+  
+
+all_possible_neighbors <- reactive(allNeighborsFromPitcher(player_name = input$player_choice, 
+                                                           n_pitches = as.numeric(input$n_pitches_choice), 
+                                                           type = 'NONE', 
+                                                           scale = TRUE, 
+                                                           nonmetric = TRUE, 
+                                                           spin_ratio_importance = 2 ** as.numeric(input$spin_ratio_importance_choice)))
+ 
+renderDataTable({
+    all_possible_neighbors()
+  },
+  rownames = FALSE,
+  options = list(
+    autoWidth = TRUE,
+    columnDefs = list(list(width = '5px', targets = 0),
+                      list(width = '150px', targets = 1)),
+    dom = c('tp'),
+    pageLength = 10,
+    processing = FALSE
+  ))
+
+#Player    LastName, FirstName
+
+# head(pitches)
+# 
+# baseballr::scrape_statcast_savant_pitcher("2021-04-01","2022-11-10",pitcherid=601713)
+# 
+# baseballr::scrape_savant_leaderboards()
+# 
+
+
+
+```
+
+### Cluster Player Graphic
+
+```{r Cluster Player Graphic (Pitcher-Based)}
+  # List of neighbors text
+  pitcher_neighbors <- reactive(nearestNeighborsFromPitcher(player_name = input$player_choice, n_pitches = as.numeric(input$n_pitches_choice), k = 5, type = 'NONE', scale = TRUE, nonmetric = TRUE, spin_ratio_importance = 2 ** as.numeric(input$spin_ratio_importance_choice)))
+
+  pitcher_neighbors_formatted <- reactive(pitcher_neighbors() %>% mutate(neighbor_formatted=paste0(row_number(), '. ', neighbors_names)))
+  
+  neighbors_text_string <- reactive(paste0(pitcher_neighbors_formatted()$neighbor_formatted, ' - ', sprintf('%.2f', round(pitcher_neighbors_formatted()$neighbors_dists, 4)), collapse = '<br>'))
+  
+
+
+mds_full <- reactive(createMDSFromPitcher(player_name = input$player_choice, n_pitches = input$n_pitches_choice))
+mds_selection_yes <- reactive(filter(mds_full(), player_name == input$player_choice))
+mds_selection_neighbors <- reactive(filter(mds_full(), player_name %in% pitcher_neighbors()$neighbors_names))
+mds_selection_no <- reactive(filter(mds_full(), !(player_name %in% c(input$player_choice, pitcher_neighbors()$neighbors_names))))
+n_possible_neighbors <- reactive(nrow(mds_selection_neighbors()) + nrow(mds_selection_no()))
+
+  # Global geom aesthetics
+  axis_text_size <- 8
+  point_size = 3.5
+
+renderPlotly({
+
+  p <- ggplot(NULL, aes(x=V1, y=V2, text=player_name)) +
+        geom_point(data=mds_selection_no(),
+                   shape=21,
+                   size=point_size,
+                   alpha=0.5,
+                   color='blue3',
+                   fill='skyblue2',
+                   stroke=0.1) +
+        geom_point(data=mds_selection_neighbors(),
+                   shape=21,
+                   size=point_size,
+                   alpha=0.75,
+                   color='orange2',
+                   fill='orange') +
+        geom_point(data=mds_selection_yes(),
+                   shape=21,
+                   size=point_size,
+                   alpha=0.75,
+                   color='red2',
+                   fill='red')
+
+  p2 <- p +
+      theme_minimal() +
+      labs(title = NULL, x='Dimension 1*', y='Dimension 2*') +
+      theme(#text = element_text(family='Source Sans Pro'),
+            axis.title.x = element_text(size=axis_text_size, face='italic'),
+            axis.title.y = element_text(size=axis_text_size, face='italic'),
+            axis.text.x = element_blank(),
+            axis.text.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank())
+  
+  
+    ggplotly(p2, tooltip = c('text')) %>%
+      layout(xaxis = list(side = 'top'))
+    
+})
+```
+
+
+
+
+Column
+--------
+
+### Similar Player Outcomes Table
+
+```{r Similar Player Outcomes Table (Pitcher-based)}
+sav_data %>% 
+  mutate(` `=link,
+         ba=1000*ba,
+         slg=1000*slg,
+         woba=1000*woba) %>% 
+  dplyr::select(` `,Player,pa,ba,slg,woba,era) %>% 
+  arrange(desc(ba)) %>% 
+  head(6) %>% 
+  gt() %>% 
+  gt_plt_bar(column=ba,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=slg,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=woba,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=era,color="blue",scale_type ="number") %>% 
+  gt_img_rows(` `)
+
+``` 
+
+### Similar Player Outcomes Table II
+
+```{r Similar Player Outcomes Table II (Pitcher-based)}
+sav_data %>% 
+  mutate(` `=link,
+         ba=1000*ba,
+         slg=1000*slg,
+         woba=1000*woba) %>% 
+  dplyr::select(` `,Player,pa,ba,slg,woba,era) %>% 
+  arrange(desc(ba)) %>% 
+  head(6) %>% 
+  gt() %>% 
+  gt_plt_bar(column=ba,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=slg,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=woba,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=era,color="blue",scale_type ="number") %>% 
+  gt_img_rows(` `)
+```
+
+
+### Similar Player Outcomes Table III
+
+```{r Similar Player Outcomes Table III (Pitcher-based)}
+sav_data %>% 
+  mutate(` `=link,
+         ba=1000*ba,
+         slg=1000*slg,
+         woba=1000*woba) %>% 
+  dplyr::select(` `,Player,pa,ba,slg,woba,era) %>% 
+  arrange(desc(ba)) %>% 
+  head(6) %>% 
+  gt() %>% 
+  gt_plt_bar(column=ba,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=slg,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=woba,color="blue",scale_type ="number") %>% 
+  gt_plt_bar(column=era,color="blue",scale_type ="number") %>% 
+  gt_img_rows(` `)
+```
+
+
+
+
+
+Pitch Mix-Based {data-navmenu="Similarity Model"}
+=================================================
+
+
+Input{.sidebar}
+------------------- 
+
+![](bachlogo.png){width=100%}
+
+```{r Pitcher-mix based similarity model inputs}
+selectInput(inputId = 'pitch_mix_choice', 
+            label = 'Select pitches:', 
+            choices = sort(unique(pitches$pitch)),
+                                     multiple = T, 
+                                     selected = c('FF', 'CH', 'SL'))
+
+
+ selectInput(inputId = 'player_choice_2', 
+            label = textOutput(outputId = 'n_possible_highlighted_pitchers'),
+            choices = sort(unique(pitches$player_name)), 
+            multiple = FALSE,
+            selected = 'Noah Syndergaard')
+
+ sliderInput(inputId = 'spin_ratio_importance_choice_2',
+                                     label = 'Emphasize velocity or spin rate?**',
+                                     min = -1,
+                                     max = 1,
+                                     value = 0,
+                                     step = 0.05,
+                                     round = -2,
+                                     ticks = FALSE)
+ 
+
+# length(which(c("SL","FF","K") %in% t))
+# t <- pitches %>% 
+#    group_by(player_name) %>% 
+#    summarise(
+#      pitch_selection=list(unique(pitch))
+#    ) %>% 
+#    filter(player_name=="Darvish, Yu") %>% 
+#    pull(pitch_selection) %>% 
+#    unlist() %>% 
+#    sort()
+# 
+# 
+#  hmm <- pitches %>% 
+#    group_by(player_name) %>% 
+#    summarise(
+#      pitch_selection=list(unique(pitch))
+#    ) %>% 
+#    mutate(countpitch=ifelse(length(which(c("SL","FF") %in% unlist(pitch_selection)))==2,1,0))
+# 
+# 
+#  length(which(c("SL","FF") %in% unlist(hmm$pitch_selection)))
+```
+
+
+Column
+--------
+
+### Similar Player Data Table
+
+```{r Similar Player Data Table (Pitch Mix-based)}
+
+```
+
+### Cluster Player Graphic
+
+```{r Cluster Player Graphic (Pitch Mix-based)}
+  
+```
+
+
+Column
+--------
+
+### Similar Player Outcomes Table
+
+```{r Similar Player Outcomes Table (Pitch Mix-based)}
+
+```
+
+### Similar Player Outcomes Table II
+
+```{r Similar Player Outcomes Table II (Pitch Mix-based)}
+
+```
+
+
+
+### Similar Player Outcomes Table III
+
+```{r Similar Player Outcomes Table III (Pitch Mix-based)}
+
+```
+
